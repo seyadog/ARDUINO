@@ -1,0 +1,79 @@
+//CONTIENE CODIGO PARA DHTL ARDUINO Y CONEXION A THINGSPEAK, ADEMAS USO DE LCD
+
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#include <DHT_U.h>
+#include <ThingSpeak.h>
+#include <WiFi.h>
+
+
+const char* ssid = "Invitados";
+const char* password = "$Cof%9T8p#";
+unsigned long channelID = 2369964;
+const char* WriteAPIKey = "10YZIC4YNS4V69RO";
+
+#define DHTPIN 13
+#define DHTTYPE DHT11
+
+WiFiClient Client;
+
+DHT_Unified dht(DHTPIN, DHTTYPE);
+
+uint32_t delayMS;
+
+void setup() {
+
+  Serial.begin(115200);
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+      Serial.println("Waiting for WiFi connection");
+    delay(500);
+  }
+
+ Serial.print("Conneceted to WiFi");
+
+  ThingSpeak.begin(Client);
+
+  dht.begin();
+
+  sensor_t sensor;
+  dht.temperature().getSensor(&sensor);
+
+  delayMS = sensor.min_delay / 1000;
+}
+
+
+void loop() {
+  
+  delay(delayMS);
+
+  sensors_event_t event;
+  dht.temperature().getEvent(&event);
+  if (isnan(event.temperature)) {
+    Serial.println(F("Error reading temperature"));
+  } else {
+    Serial.print(F("Temperature: "));
+    Serial.print(event.temperature);
+    Serial.println(F("°C"));
+  }
+  ThingSpeak.setField (1,event.temperature);
+ float t=event.temperature;
+
+  dht.humidity().getEvent(&event);
+  if (isnan(event.relative_humidity)) {
+    Serial.println(F("Error reading humidity"));
+  } else {
+    Serial.print(F("Humidity: "));
+    Serial.print(event.relative_humidity);
+    Serial.println(F("%"));
+  }
+  float h=event.relative_humidity;
+
+  ThingSpeak.setField (2,event.relative_humidity);
+
+    ThingSpeak.writeFields(channelID,WriteAPIKey);
+    Serial.println("enviado");
+  
+}
