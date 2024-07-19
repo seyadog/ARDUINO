@@ -1,0 +1,475 @@
+//CONTIENE EL CODIGO PARA UTILIZAR LA PISTOLA RFID QUE CEUNTA CON LA PANTALLA OLDE LCD Y UN BOTON PARA EL CAMBIO DE MODO EN EL INPUT
+//CODIGO DE JAVASCRIPT PARA LAS EXTENSIONES DE GOOGLE SHEETS EN LA PARTE INFERIOR
+
+
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <SPI.h>
+#include <MFRC522.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+
+// OLED display configuration
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1  // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+#define SS_PIN 5
+#define RST_PIN 4
+
+#define SDA 13 // Define SDA pins
+#define SCL 14 // Define SCL pins
+#define SWITCH_PIN_OUT 25 // Pin to send current
+#define SWITCH_PIN_IN 26  // Pin to read current
+
+const char* ssid = "Nigger";    //AQUI SE CAMBIA EL NOMBRE DE LA RED, TIENE QUE ESTAR ENTRE COMILLAS
+const char* password = "joseandres";  //AQUI SE CAMBIA LA CLAVE DE LA RED, TIENE QUE ESTAR ENTRE COMILLAS
+
+String Web_App_URL = "https://script.google.com/macros/s/AKfycbyPzvTjmlUMW5IZJKsiFuqlRLychHw-L0-GvHGEHbjZnXHYy6UAoMR5sNQd05v1UXWvxg/exec";
+
+String atc_Info = "";
+String atc_Name = "";
+String atc_Date = "";
+String atc_Time_In = "";
+String atc_Time_Out = "";
+
+int readsuccess;
+char str[32] = "";
+String UID_Result = "--------";
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin(SDA, SCL);
+  
+  // Initialize the switch pins
+  pinMode(SWITCH_PIN_OUT, OUTPUT);
+  pinMode(SWITCH_PIN_IN, INPUT);
+  digitalWrite(SWITCH_PIN_OUT, HIGH); // Send current
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x64
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;);
+  }
+  display.display();
+  delay(2000); // Pause for 2 seconds
+
+  display.clearDisplay();
+
+  SPI.begin();
+  mfrc522.PCD_Init();
+
+  Serial.println();
+  Serial.println("-------------");
+  Serial.println("Modo WIFI : STA");
+  WiFi.mode(WIFI_STA);
+  Serial.println("-------------");
+
+  Serial.println();
+  Serial.println("------------");
+  Serial.print("Conectando a ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+
+  int connecting_process_timed_out = 20;
+  connecting_process_timed_out = connecting_process_timed_out * 2;
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor((SCREEN_WIDTH - 72) / 2, (SCREEN_HEIGHT - 8) / 2);
+    display.print("CONECTANDO");
+    display.setCursor((SCREEN_WIDTH - 54) / 2, (SCREEN_HEIGHT - 8) / 2 + 10);
+    display.print("..WIFI..");
+    display.display();
+    delay(250);
+
+    display.clearDisplay();
+    delay(250);
+
+    if (connecting_process_timed_out > 0) connecting_process_timed_out--;
+    if (connecting_process_timed_out == 0) {
+      delay(1000);
+      ESP.restart();
+    }
+  }
+
+  Serial.println();
+  Serial.println("WiFi conectado");
+  Serial.println("------------");
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  
+  // Display "UDLA"
+  display.setCursor((SCREEN_WIDTH - 24) / 2, (SCREEN_HEIGHT - 8) / 2);
+  display.print("UDLA");
+  display.display();
+  delay(2000);
+  display.clearDisplay();
+
+  // Display "FICA"
+  display.setCursor((SCREEN_WIDTH - 24) / 2, (SCREEN_HEIGHT - 8) / 2);
+  display.print("FICA");
+  display.display();
+  delay(2000);
+  display.clearDisplay();
+
+  // Display "INGENIERIA EN ELECTRONICA Y AUTOMATIZACION"
+  display.setCursor((SCREEN_WIDTH - 120) / 2, (SCREEN_HEIGHT - 16) / 2);
+  display.print("INGENIERIA EN");
+  display.setCursor((SCREEN_WIDTH - 120) / 2, (SCREEN_HEIGHT - 16) / 2 + 10);
+  display.print("ELECTRONICA Y");
+  display.setCursor((SCREEN_WIDTH - 120) / 2, (SCREEN_HEIGHT - 16) / 2 + 20);
+  display.print("AUTOMATIZACION");
+  display.display();
+  delay(2000);
+  display.clearDisplay();
+}
+
+void loop() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor((SCREEN_WIDTH - 84) / 2, (SCREEN_HEIGHT - 8) / 2);
+  display.print("Escanea Paquete");
+  display.display();
+  delay(1000);
+
+  readsuccess = getUID();
+
+  if (readsuccess) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor((SCREEN_WIDTH - 60) / 2, (SCREEN_HEIGHT - 8) / 2);
+    display.print("DETECTADO");
+    display.setCursor((SCREEN_WIDTH - 90) / 2, (SCREEN_HEIGHT - 8) / 2 + 10);
+    display.print("ESPERE POR FAVOR");
+    display.display();
+    delay(1000);
+
+    http_Req(UID_Result);
+
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor((SCREEN_WIDTH - 90) / 2, (SCREEN_HEIGHT - 8) / 2);
+    display.print("PAQUETE PROCESADO");
+    display.setCursor((SCREEN_WIDTH - 120) / 2, (SCREEN_HEIGHT - 8) / 2 + 10);
+    display.print("ESCOGE OTRO PAQUETE");
+    display.display();
+    delay(2000);
+  }
+  delay(10);
+}
+
+void http_Req(String str_uid) {
+  String status = digitalRead(SWITCH_PIN_IN) == HIGH ? "OUT" : "IN"; //EN ESTA PARTE SE CAMBIA EL STATUS EN GCLOUD, DEPENDE DEL SWITCH
+  String http_req_url = Web_App_URL + "?uid=" + str_uid + "&status=" + status;
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("Enviando solicitud a Google Sheets...");
+    Serial.print("URL : ");
+    Serial.println(http_req_url);
+
+    HTTPClient http;
+    http.begin(http_req_url.c_str());
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+    int httpCode = http.GET();
+    Serial.print("Codigo de estado HTTP: ");
+    Serial.println(httpCode);
+
+    String payload;
+    if (httpCode > 0) {
+      payload = http.getString();
+      Serial.println("Carga util: " + payload);
+    }
+
+    Serial.println("-------------");
+    http.end();
+
+  } else {
+    Serial.println("ERROR AL CONECTAR A WIFI");
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.print("ERROR WIFI");
+    display.display();
+    delay(3000);
+    display.clearDisplay();
+  }
+}
+
+int getUID() {
+  if (!mfrc522.PICC_IsNewCardPresent()) {
+    return 0;
+  }
+  if (!mfrc522.PICC_ReadCardSerial()) {
+    return 0;
+  }
+
+  byteArray_to_string(mfrc522.uid.uidByte, mfrc522.uid.size, str);
+  UID_Result = str;
+
+  mfrc522.PICC_HaltA();
+  mfrc522.PCD_StopCrypto1();
+
+  return 1;
+}
+
+void byteArray_to_string(byte array[], unsigned int len, char buffer[]) {
+  for (unsigned int i = 0; i < len; i++) {
+    byte nib1 = (array[i] >> 4) & 0x0F;
+    byte nib2 = (array[i] >> 0) & 0x0F;
+    buffer[i * 2 + 0] = nib1 < 0xA ? '0' + nib1 : 'A' + nib1 - 0xA;
+    buffer[i * 2 + 1] = nib2 < 0xA ? '0' + nib2 : 'A' + nib2 - 0xA;
+  }
+  buffer[len * 2] = '\0';
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// CODIGO DE JAVA 
+
+
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Attendance and Registration Mode.
+//________________________________________________________________________________doGet()
+function doGet(e) { 
+  
+  if(!e){
+    e={ "parameter":{"uid":"hola", status:"ok" }};
+  }
+  Logger.log(JSON.stringify(e));
+  
+  var result = 'OK';
+  if (e.parameter == 'undefined') {
+    result = 'No_Parameters';
+    
+  }
+  else {
+   
+    var sheet_id = '1e-WVru5gdr5RyVHmeJItbDQIfh2FRfyq1FL6AApaHws'; 	// Spreadsheet ID.
+    var sheet_UD = 'User_Data';  // Sheet name for user data.
+    var sheet_AT = 'Attendance';  // Sheet name for attendance.
+
+    var sheet_open = SpreadsheetApp.openById(sheet_id);
+    var sheet_user_data = sheet_open.getSheetByName(sheet_UD);
+    var sheet_attendence = sheet_open.getSheetByName(sheet_AT);
+    var sheet_log = sheet_open.getSheetByName('log');
+    
+    // sts_val is a variable to hold the status sent by ESP32.
+    // sts_val will contain "reg" or "atc".
+    // "reg" = new user registration.
+    // "atc" = attendance (time in and time out).
+    var sts_val = "";
+    
+    // uid_val is a variable to hold the UID of the RFID card or keychain sent by the ESP32.
+    var uid_val = "";
+    
+    // UID storage column.
+    var uid_column = "B";
+    
+    // Variable to retrieve the "Time In" value from the sheet.
+    var TI_val = "";
+    // Variable to retrieve the "Date" value from the sheet.
+    var Date_val = "";
+    
+    //----------------------------------------Retrieves the value of the parameter sent by the ESP32.
+    
+     
+    console.log(uid_val);
+     var lcn = parseInt(sheet_log.getLastRow());
+     var Curr_Date = Utilities.formatDate(new Date(), "Asia/Jakarta", 'dd/MM/yyyy');
+        var Curr_Time = Utilities.formatDate(new Date(), "Asia/Jakarta", 'HH:mm:ss');
+     console.log(lcn);
+    sheet_log.getRange("A" +(lcn+1)).setValue(e.parameter.uid);
+    sheet_log.getRange("B" +(lcn+1)).setValue(Curr_Date);
+    sheet_log.getRange("C" +(lcn+1)).setValue(Curr_Time);
+     sheet_log.getRange("C" +(lcn+1)).setValue(e.parameter.status);
+
+  return;
+    //----------------------------------------Conditions for registering new users.
+    if (sts_val == 'reg') {
+      var check_new_UID = checkUID(sheet_id, sheet_UD, 2, uid_val);
+      
+      // Conditions when the UID has been registered. Then registration was cancelled.
+      if (check_new_UID == true) {
+        result += ",regErr01"; // Err_01 = UID is already registered.
+        
+        // Sends response payload to ESP32.
+        return ContentService.createTextOutput(result);
+      }
+
+      // Writes the new user's UID to the "user data" sheet.
+      var getLastRowUIDCol = findLastRow(sheet_id, sheet_UD, uid_column);  // Look for a row to write the new user's UID.
+      var newUID = sheet_open.getRange(uid_column + (getLastRowUIDCol + 1));
+      newUID.setValue(uid_val);
+      result += ",R_Successful";
+      
+      // Sends response payload to ESP32.
+      return ContentService.createTextOutput(result);
+    }
+    //----------------------------------------
+
+    //----------------------------------------Conditions for filling attendance (Time In and Time Out).
+    if (sts_val == 'atc') {
+      // Checks whether the UID is already registered in the "user data" sheet.
+      // findUID(Spreadsheet ID, sheet name, index column, UID value)
+      // index column : 1 = column A, 2 = column B and so on.
+      var FUID = findUID(sheet_id, sheet_UD, 2, uid_val);
+      
+      // "(FUID == -1)" means that the UID has not been registered in the "user data" sheet, so attendance filling is rejected.
+      if (FUID == -1) {
+        result += ",atcErr01"; // atcErr01 = UID not registered.
+        return ContentService.createTextOutput(result);
+      } else {
+        // After the UID has been checked and the result is that the UID has been registered,
+        // then take the "name" of the UID owner from the "user data" sheet.
+        // The name of the UID owner is in column "A" on the "user data" sheet.
+        var get_Range = sheet_user_data.getRange("A" + (FUID+2));
+        var user_name_by_UID = get_Range.getValue();
+
+        // Variables to determine attendance filling, whether to fill in "Time In", "Time Out" or attendance has been completed for today.
+        var enter_data = "time_in";
+        
+        // Variable to get row position. This is used to fill in "Time Out".
+        var num_row;
+        
+        // Variables to get the current Date and Time.
+        var Curr_Date = Utilities.formatDate(new Date(), "Asia/Jakarta", 'dd/MM/yyyy');
+        var Curr_Time = Utilities.formatDate(new Date(), "Asia/Jakarta", 'HH:mm:ss');
+
+        // Variable to get all the data from the "attendance" sheet.
+        var data = sheet_attendence.getDataRange().getDisplayValues();
+        
+        //..................Check whether "Time In" or "Time Out" is filled in.
+        if (data.length > 1) {
+          for (var i = 0; i < data.length; i++) {
+            if (data[i][1] == uid_val) {
+              if (data[i][2] == Curr_Date) {
+                if (data[i][4] == "") {
+                  Date_val = data[i][2];
+                  TI_val = data[i][3];
+                  enter_data = "time_out";
+                  num_row = i + 1;
+                  break;
+                } else {
+                  enter_data = "finish";
+                }
+              }
+            }
+          }
+        }
+        //..................
+        
+        //..................Conditions for filling in "Time In" attendance.
+        if (enter_data == "time_in") {
+          sheet_attendence.insertRows(2);
+          sheet_attendence.getRange("A2").setValue(user_name_by_UID);
+          sheet_attendence.getRange("B2").setValue(uid_val);
+          sheet_attendence.getRange("C2").setValue(Curr_Date);
+          sheet_attendence.getRange("D2").setValue(Curr_Time);
+          SpreadsheetApp.flush();
+          
+          // Sends response payload to ESP32.
+          result += ",TI_Successful" + "," + user_name_by_UID + "," + Curr_Date + "," + Curr_Time;
+          return ContentService.createTextOutput(result);
+        }
+        //..................
+        
+        //..................Conditions for filling in "Time Out" attendance.
+        if (enter_data == "time_out") {
+          sheet_attendence.getRange("E" + num_row).setValue(Curr_Time);
+          result += ",TO_Successful" + "," + user_name_by_UID + "," + Date_val + "," + TI_val + "," + Curr_Time;
+          
+          // Sends response payload to ESP32.
+          return ContentService.createTextOutput(result);
+        }
+        //..................
+        
+        //..................Condition when "Time In" and "Time Out" are filled.
+        if (enter_data == "finish") {
+          result += ",atcInf01"; // atcInf01 = You have completed your attendance record for today (Time In and Time Out have been filled in for today).
+          
+          // Sends response payload to ESP32.
+          return ContentService.createTextOutput(result);
+        }
+        //..................
+      }
+    }
+    //----------------------------------------
+  }
+}
+//________________________________________________________________________________
+
+//________________________________________________________________________________stripQuotes()
+function stripQuotes( value ) {
+  return value.replace(/^["']|['"]$/g, "");
+}
+//________________________________________________________________________________
+
+//________________________________________________________________________________findLastRow()
+// Function to find the last row in a certain column.
+// Reference : https://www.jsowl.com/find-the-last-row-of-a-single-column-in-google-sheets-in-apps-script/
+function findLastRow(id_sheet, name_sheet, name_column) {
+  var spreadsheet = SpreadsheetApp.openById(id_sheet);
+  var sheet = spreadsheet.getSheetByName(name_sheet);
+  var lastRow = sheet.getLastRow();
+
+  var range = sheet.getRange(name_column + lastRow);
+
+  if (range.getValue() !== "") {
+    return lastRow;
+  } else {
+    return range.getNextDataCell(SpreadsheetApp.Direction.UP).getRow();
+  }
+}
+//________________________________________________________________________________
+
+//________________________________________________________________________________findUID() 
+// Reference : https://stackoverflow.com/a/29546373
+function findUID(id_sheet, name_sheet, column_index, searchString) {
+  var open_sheet = SpreadsheetApp.openById(id_sheet);
+  var sheet = open_sheet.getSheetByName(name_sheet);
+  var columnValues = sheet.getRange(2, column_index, sheet.getLastRow()).getValues();  // 1st is header row.
+  var searchResult = columnValues.findIndex(searchString);  // Row Index - 2.
+
+  return searchResult;
+}
+//________________________________________________________________________________
+
+//________________________________________________________________________________checkUID()
+// Reference : https://stackoverflow.com/a/29546373
+function checkUID(id_sheet, name_sheet, column_index, searchString) {
+  var open_sheet = SpreadsheetApp.openById(id_sheet);
+  var sheet = open_sheet.getSheetByName(name_sheet); 
+  var columnValues = sheet.getRange(2, column_index, sheet.getLastRow()).getValues();  // 1st is header row.
+  var searchResult = columnValues.findIndex(searchString);  // Row Index - 2.
+
+  if(searchResult != -1) {
+    // searchResult + 2 is row index.
+    sheet.setActiveRange(sheet.getRange(searchResult + 2, 3)).setValue("UID has been registered in this row.");
+    return true;
+  } else {
+    return false;
+  }
+}
+//________________________________________________________________________________
+
+//________________________________________________________________________________findIndex()
+Array.prototype.findIndex = function(search){
+  if(search == "") return false;
+  for (var i=0; i<this.length; i++)
+    if (this[i].toString().indexOf(search) > -1 ) return i;
+
+  return -1;
+}
+//________________________________________________________________________________
+//<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
