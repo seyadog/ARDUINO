@@ -1,0 +1,76 @@
+//MOVIMIENTO DE MOTORES CON INFRARROJO
+
+#include <IRremote.h>
+
+int IN1 = 12;
+int IN2 = 14;
+int IB1 = 18;
+int IB2 = 19;
+
+int IRpin = 2;
+int valorinf;
+int command;
+
+const int ENA = 13;
+const int ENB = 21;
+
+int velocidad = 200;
+
+void setup() {
+  Serial.begin(9600);
+  IrReceiver.begin(IRpin);
+
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IB1, OUTPUT);
+  pinMode(IB2, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  pinMode(ENB, OUTPUT);
+}
+
+void loop() {
+  while (IrReceiver.decode() == 0) {
+  }
+  command = IrReceiver.decodedIRData.command;
+
+  Serial.println(command);
+
+  IrReceiver.resume();
+
+    if (command == 74) { // velocidad es 255 (rapido)
+    Serial.println("rapido");
+    velocidad = 250;
+       } else if (command == 82) { // velocidad es 200 (medio)
+    Serial.println("medio");
+     velocidad = 200;
+          } else if (command == 66) { // velocidad es 170 (lento)
+    Serial.println("lento");
+    velocidad = 170;
+    
+        }
+
+ analogWrite(ENA, velocidad);
+  analogWrite(ENB, velocidad);
+
+  if (command == 64) {
+    Serial.println("adelante");
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+    digitalWrite(IB1, HIGH);
+    digitalWrite(IB2, LOW);
+       } else if (command == 9) {
+    Serial.println("DERECHA");
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+        } else if (command == 7) {
+    Serial.println("IZQUIERA");
+    digitalWrite(IB1, HIGH);
+    digitalWrite(IB2, LOW);
+  }
+
+  delay(100);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IB1, LOW);
+  digitalWrite(IB2, LOW);
+}
